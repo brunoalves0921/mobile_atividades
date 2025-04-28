@@ -1,4 +1,4 @@
-# MyForm
+# CadApp
 
 Aplicativo Android criado com **Jetpack Compose** que exibe um **formulário** para preenchimento de dados pessoais.
 
