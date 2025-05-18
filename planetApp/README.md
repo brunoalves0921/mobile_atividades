@@ -1,12 +1,6 @@
 # CadApp
 
-Aplicativo Android criado com **Jetpack Compose** que mostra curiosidades sobre animais
-
-## Funcionalidades
-
-- Campos de texto para informações dos animais.
-- **Botão** para abrir nova tela com mais informações.
-- Imagens dos animais.
+Aplicativo Android criado com **Jetpack Compose** que mostra curiosidades sobre planetas
 
 ## Screenshots
 
