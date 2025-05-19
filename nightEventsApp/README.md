@@ -1,6 +1,6 @@
 # CadApp
 
-Aplicativo Android criado com **Jetpack Compose** gerencia eventos e inscrições para eventos
+Aplicativo Android criado com **Jetpack Compose** que gerencia eventos e inscrições para eventos
 
 ## Screenshots
 
