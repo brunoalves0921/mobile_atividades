@@ -51,7 +51,8 @@ dependencies {
     // Adicione a dependência do Analytics
     implementation("com.google.firebase:firebase-analytics")
 
-
+// No arquivo build.gradle.kts (Módulo :app)
+    implementation("androidx.compose.material:material-icons-extended-android:1.6.8") // Verifique a versão mais recente
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)

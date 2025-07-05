@@ -4,17 +4,25 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.cruditemapp.data.Item
 import com.example.cruditemapp.ui.theme.CrudItemAppTheme
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -25,131 +33,155 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    ItemScreen()
+                    // Chamando a nova tela principal
+                    ImprovedItemScreen()
                 }
             }
         }
     }
 }
 
+// Classe selada para gerenciar os diferentes estados da UI
+sealed class UiState {
+    object Loading : UiState()
+    data class Success(val items: List<Item>) : UiState()
+    data class Error(val message: String) : UiState()
+}
+
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ItemScreen() {
+fun ImprovedItemScreen() {
     // --- ESTADOS DA UI ---
-    var title by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    val items = remember { mutableStateListOf<Item>() }
+    var uiState by remember { mutableStateOf<UiState>(UiState.Loading) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
-    // Estado para controlar o item sendo editado e a visibilidade do diálogo
+    // Estados para controlar diálogos e o bottom sheet
+    var showAddItemSheet by remember { mutableStateOf(false) }
     var editingItem by remember { mutableStateOf<Item?>(null) }
+    var deletingItem by remember { mutableStateOf<Item?>(null) }
+
 
     // --- REFERÊNCIA AO FIREBASE ---
-    val itemsCollection = Firebase.firestore.collection("items")
+    val itemsCollection = remember { Firebase.firestore.collection("items") }
 
     // --- LÓGICA DE LEITURA (EM TEMPO REAL) ---
-    // LaunchedEffect escuta por mudanças no Firestore e atualiza a lista 'items' automaticamente.
     LaunchedEffect(Unit) {
         itemsCollection.addSnapshotListener { snapshots, error ->
             if (error != null) {
-                Log.e("Firebase", "Erro ao escutar por mudanças no Firestore.", error)
+                Log.e("Firebase", "Erro ao escutar por mudanças.", error)
+                uiState = UiState.Error("Falha ao carregar os dados. Tente novamente.")
                 return@addSnapshotListener
             }
 
-            items.clear()
             if (snapshots != null) {
-                for (document in snapshots) {
-                    val item = document.toObject(Item::class.java).copy(id = document.id)
-                    items.add(item)
+                val itemsList = snapshots.documents.map { document ->
+                    document.toObject(Item::class.java)!!.copy(id = document.id)
                 }
-                Log.d("Firebase", "Lista de itens atualizada. Total de itens: ${items.size}")
+                uiState = UiState.Success(itemsList)
+                Log.d("Firebase", "Lista de itens atualizada. Total: ${itemsList.size}")
             }
         }
     }
 
-    // --- LÓGICA DE ESCRITA (CREATE) ---
-    fun addItem() {
-        if (title.isNotBlank() && description.isNotBlank()) {
-            Log.d("Firebase", "Botão 'Add Item' clicado. Tentando adicionar: Título='$title'")
-            val newItem = Item(title = title, description = description)
-            itemsCollection.add(newItem) // [cite: 524]
-                .addOnSuccessListener { documentReference ->
-                    Log.d("Firebase", "SUCESSO! Item adicionado com ID: ${documentReference.id}")
-                    title = ""
-                    description = ""
-                }
-                .addOnFailureListener { e ->
-                    Log.e("Firebase", "FALHA ao adicionar item.", e)
-                }
-        } else {
-            Log.w("Firebase", "Tentativa de adicionar item com campos vazios.")
-        }
-    }
-
-    // --- LÓGICA DE APAGAR (DELETE) ---
-    fun deleteItem(itemId: String) {
-        Log.d("Firebase", "Tentando apagar item com ID: $itemId")
-        itemsCollection.document(itemId).delete()
+    // --- FUNÇÕES CRUD ---
+    fun addItem(title: String, description: String) {
+        val newItem = Item(title = title, description = description)
+        itemsCollection.add(newItem)
             .addOnSuccessListener {
-                Log.d("Firebase", "SUCESSO! Item apagado.")
+                Log.d("Firebase", "SUCESSO! Item adicionado.")
+                scope.launch { snackbarHostState.showSnackbar("Item adicionado com sucesso!") }
             }
             .addOnFailureListener { e ->
-                Log.e("Firebase", "FALHA ao apagar item.", e)
+                Log.e("Firebase", "FALHA ao adicionar item.", e)
+                scope.launch { snackbarHostState.showSnackbar("Erro ao adicionar o item.") }
             }
     }
 
-    // --- INTERFACE DO USUÁRIO (UI) ---
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        // --- SEÇÃO DE INPUT ---
-        Text("Title", style = MaterialTheme.typography.titleMedium) // [cite: 599]
-        OutlinedTextField(
-            value = title,
-            onValueChange = { title = it },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text("Description", style = MaterialTheme.typography.titleMedium)
-        OutlinedTextField(
-            value = description,
-            onValueChange = { description = it },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(onClick = { addItem() }, modifier = Modifier.fillMaxWidth()) {
-            Text("Add Item") // [cite: 601]
+    fun updateItem(item: Item) {
+        item.id?.let {
+            itemsCollection.document(it).set(item)
+                .addOnSuccessListener {
+                    Log.d("Firebase", "SUCESSO! Item atualizado.")
+                    scope.launch { snackbarHostState.showSnackbar("Item atualizado com sucesso!") }
+                    editingItem = null // Fecha o diálogo
+                }
+                .addOnFailureListener { e ->
+                    Log.e("Firebase", "FALHA ao atualizar item.", e)
+                    scope.launch { snackbarHostState.showSnackbar("Erro ao atualizar o item.") }
+                }
         }
+    }
 
-        Spacer(modifier = Modifier.height(16.dp))
-        Divider()
+    fun performDelete(item: Item) {
+        item.id?.let {
+            itemsCollection.document(it).delete()
+                .addOnSuccessListener {
+                    Log.d("Firebase", "SUCESSO! Item apagado.")
+                    scope.launch { snackbarHostState.showSnackbar("Item apagado.") }
+                    deletingItem = null // Fecha o diálogo de confirmação
+                }
+                .addOnFailureListener { e ->
+                    Log.e("Firebase", "FALHA ao apagar item.", e)
+                    scope.launch { snackbarHostState.showSnackbar("Erro ao apagar o item.") }
+                }
+        }
+    }
 
-        // --- LISTA DE ITENS ---
-        LazyColumn { // [cite: 552]
-            items(items) { item -> // [cite: 553]
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Title: ${item.title}") // [cite: 606, 609, 616]
-                        Text("Description: ${item.description}") // [cite: 606, 609, 616]
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End
+    // --- INTERFACE DO USUÁRIO (UI) COM SCAFFOLD ---
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Itens (CRUD App)") },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.primary
+                )
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(onClick = { showAddItemSheet = true }) {
+                Icon(Icons.Default.Add, contentDescription = "Adicionar Item")
+            }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { paddingValues ->
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues),
+            contentAlignment = Alignment.Center
+        ) {
+            // Controla a exibição com base no UiState
+            when (val state = uiState) {
+                is UiState.Loading -> CircularProgressIndicator()
+                is UiState.Error -> Text(
+                    text = state.message,
+                    color = MaterialTheme.colorScheme.error,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(16.dp)
+                )
+                is UiState.Success -> {
+                    if (state.items.isEmpty()) {
+                        Text(
+                            text = "Nenhum item encontrado.\nToque no botão '+' para adicionar o primeiro!",
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            // Botão de Update agora abre o diálogo
-                            TextButton(onClick = { editingItem = item }) { // [cite: 608, 611, 618]
-                                Text("Update")
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            // Botão de Delete agora chama a função deleteItem
-                            TextButton(onClick = { item.id?.let { deleteItem(it) } }) { // [cite: 607, 610, 617]
-                                Text("Delete")
+                            items(state.items, key = { it.id!! }) { item ->
+                                ItemCard(
+                                    item = item,
+                                    onEditClick = { editingItem = item },
+                                    onDeleteClick = { deletingItem = item }
+                                )
                             }
                         }
                     }
@@ -158,31 +190,128 @@ fun ItemScreen() {
         }
     }
 
-    // --- DIÁLOGO DE UPDATE ---
-    // Este diálogo só aparece quando 'editingItem' não for nulo
+    // --- BOTTOM SHEET PARA ADICIONAR ITEM ---
+    if (showAddItemSheet) {
+        AddItemBottomSheet(
+            onDismiss = { showAddItemSheet = false },
+            onSave = { title, description ->
+                addItem(title, description)
+                showAddItemSheet = false
+            }
+        )
+    }
+
+    // --- DIÁLOGO DE EDIÇÃO ---
     if (editingItem != null) {
         EditItemDialog(
             item = editingItem!!,
             onDismiss = { editingItem = null },
             onSave = { updatedItem ->
-                Log.d("Firebase", "Tentando salvar item atualizado com ID: ${updatedItem.id}")
-                updatedItem.id?.let {
-                    itemsCollection.document(it).set(updatedItem)
-                        .addOnSuccessListener {
-                            Log.d("Firebase", "SUCESSO! Item atualizado.")
-                            editingItem = null
-                        }
-                        .addOnFailureListener { e ->
-                            Log.e("Firebase", "FALHA ao atualizar item.", e)
-                        }
-                }
+                updateItem(updatedItem)
             }
+        )
+    }
+
+    // --- DIÁLOGO DE CONFIRMAÇÃO DE EXCLUSÃO ---
+    if (deletingItem != null) {
+        ConfirmationDialog(
+            onConfirm = { performDelete(deletingItem!!) },
+            onDismiss = { deletingItem = null }
         )
     }
 }
 
 
+@Composable
+fun ItemCard(item: Item, onEditClick: () -> Unit, onDeleteClick: () -> Unit) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(item.title, style = MaterialTheme.typography.titleLarge)
+                Spacer(modifier = Modifier.height(4.dp))
+                // Esconde a descrição se ela estiver em branco
+                AnimatedVisibility(visible = item.description.isNotBlank()) {
+                    Text(item.description, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Row {
+                IconButton(onClick = onEditClick) {
+                    Icon(Icons.Default.Edit, contentDescription = "Editar Item", tint = MaterialTheme.colorScheme.secondary)
+                }
+                IconButton(onClick = onDeleteClick) {
+                    Icon(Icons.Default.Delete, contentDescription = "Apagar Item", tint = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AddItemBottomSheet(onDismiss: () -> Unit, onSave: (String, String) -> Unit) {
+    var title by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var titleError by remember { mutableStateOf(false) }
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+                .padding(bottom = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text("Adicionar Novo Item", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(bottom = 16.dp))
+
+            OutlinedTextField(
+                value = title,
+                onValueChange = {
+                    title = it
+                    titleError = it.isBlank()
+                },
+                label = { Text("Título*") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                isError = titleError,
+                supportingText = {
+                    if (titleError) {
+                        Text("O título é obrigatório")
+                    }
+                }
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            OutlinedTextField(
+                value = description,
+                onValueChange = { description = it },
+                label = { Text("Descrição (Opcional)") },
+                modifier = Modifier.fillMaxWidth().height(100.dp)
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            Button(
+                onClick = {
+                    if (title.isNotBlank()) {
+                        onSave(title, description)
+                    } else {
+                        titleError = true
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Salvar Item")
+            }
+        }
+    }
+}
+
+// O diálogo de edição permanece muito similar, você pode reutilizá-lo ou usar este.
 @Composable
 fun EditItemDialog(item: Item, onDismiss: () -> Unit, onSave: (Item) -> Unit) {
     var title by remember { mutableStateOf(item.title) }
@@ -190,35 +319,54 @@ fun EditItemDialog(item: Item, onDismiss: () -> Unit, onSave: (Item) -> Unit) {
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Edit Item") },
+        title = { Text("Editar Item") },
         text = {
             Column {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("Title") }
+                    label = { Text("Título") },
+                    modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
-                    label = { Text("Description") }
+                    label = { Text("Descrição") },
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         },
         confirmButton = {
-            Button(
-                onClick = {
-                    val updatedItem = item.copy(title = title, description = description)
-                    onSave(updatedItem)
-                }
-            ) {
-                Text("Save")
+            Button(onClick = { onSave(item.copy(title = title, description = description)) }) {
+                Text("Salvar")
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text("Cancelar")
+            }
+        }
+    )
+}
+
+@Composable
+fun ConfirmationDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Confirmar Exclusão") },
+        text = { Text("Você tem certeza de que deseja apagar este item? Esta ação não pode ser desfeita.") },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            ) {
+                Text("Apagar")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancelar")
             }
         }
     )
