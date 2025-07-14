@@ -38,7 +38,7 @@ fun MsgAppNavHost(vm: MsgViewModel = viewModel()) {
             }
         }
     }
-    val userId = user?.uid ?: "Bruno"
+    val userId = user?.uid ?: "Tauane"
     val userName by remember { mutableStateOf(userId) }
 
     NavHost(navController = navController, startDestination = "room_selector") {
@@ -60,7 +60,6 @@ fun MsgAppNavHost(vm: MsgViewModel = viewModel()) {
                 messages = messages,
                 typingUsers = typingUsers,
                 onSend = { text, replyTo -> vm.sendMessage(userId, userName, text, replyTo) },
-                onSendImage = { uri, replyTo -> vm.sendImage(userId, userName, uri, replyTo) },
                 onDelete = { messageId -> vm.deleteMessage(messageId) },
                 onUpdateTyping = { isTyping -> vm.updateTypingStatus(userId, userName, isTyping) },
                 currentRoom = roomName,

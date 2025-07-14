@@ -1,14 +1,7 @@
 package com.example.msgapp.ui.view
 
-import android.Manifest
-import android.content.Context
-import android.net.Uri
 import android.text.format.DateFormat
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
@@ -18,25 +11,18 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AddLink
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.rememberAsyncImagePainter
-import com.example.msgapp.createImageUri
 import com.example.msgapp.model.Message
-import com.example.msgapp.model.MessageType
-import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,7 +32,6 @@ fun ChatScreen(
     messages: List<Message>,
     typingUsers: List<String>,
     onSend: (String, Message?) -> Unit,
-    onSendImage: (Uri, Message?) -> Unit,
     onDelete: (String) -> Unit,
     onUpdateTyping: (Boolean) -> Unit,
     currentRoom: String,
@@ -56,83 +41,23 @@ fun ChatScreen(
     var messageToReply by remember { mutableStateOf<Message?>(null) }
     var showMenu by remember { mutableStateOf(false) }
     var messageToAction by remember { mutableStateOf<Message?>(null) }
-    var showImageSourceDialog by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
-    val context = LocalContext.current
 
-    // --- Lógica para Câmera e Galeria ---
-    var cameraImageUri by remember { mutableStateOf<Uri?>(null) }
-
-    // Launcher para Galeria
-    val galleryLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia(),
-        onResult = { uri ->
-            uri?.let { onSendImage(it, messageToReply) }
-            messageToReply = null
-        }
-    )
-
-    // Launcher para Câmera
-    val cameraLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicture(),
-        onResult = { success ->
-            if (success) {
-                cameraImageUri?.let { onSendImage(it, messageToReply) }
-                messageToReply = null
-            }
-        }
-    )
-
-    // Launcher para pedir permissão de Câmera
-    val cameraPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-        onResult = { isGranted ->
-            if (isGranted) {
-                val newUri = createImageUri(context)
-                cameraImageUri = newUri
-                cameraLauncher.launch(newUri)
-            } else {
-                // Opcional: Mostrar uma mensagem de que a permissão é necessária
-            }
-        }
-    )
-
-    // --- Fim da Lógica de Câmera e Galeria ---
-
-
-    // Lógica para o indicador "digitando" com debounce
+    // Lógica para o indicador "digitando"
     LaunchedEffect(input) {
         onUpdateTyping(input.isNotBlank())
-        if (input.isNotBlank()) {
-            delay(2000)
-            onUpdateTyping(false)
-        }
     }
 
     // Rola para a última mensagem quando a lista é atualizada
-    LaunchedEffect(messages) {
+    LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.size - 1)
         }
     }
 
-    if (showImageSourceDialog) {
-        ImageSourceDialog(
-            onDismiss = { showImageSourceDialog = false },
-            onCameraClick = {
-                showImageSourceDialog = false
-                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-            },
-            onGalleryClick = {
-                showImageSourceDialog = false
-                galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-            }
-        )
-    }
-
     Column(Modifier.fillMaxSize()) {
-        // Cabeçalho (sem mudanças)
+        // Cabeçalho
         Surface(
             tonalElevation = 2.dp, shadowElevation = 4.dp,
             color = MaterialTheme.colorScheme.primary, modifier = Modifier.fillMaxWidth()
@@ -154,7 +79,7 @@ fun ChatScreen(
             }
         }
 
-
+        // Lista de Mensagens
         Box(modifier = Modifier.weight(1f)) {
             LazyColumn(
                 state = listState,
@@ -189,6 +114,7 @@ fun ChatScreen(
             }
         }
 
+        // Rodapé com campo de entrada
         Column {
             if (typingUsers.isNotEmpty()) {
                 val typingText = when (typingUsers.size) {
@@ -212,9 +138,7 @@ fun ChatScreen(
                         Modifier.fillMaxWidth().padding(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        IconButton(onClick = { showImageSourceDialog = true }) {
-                            Icon(Icons.Default.AddLink, contentDescription = "Anexar Imagem ou Foto")
-                        }
+                        // O botão de anexo foi removido daqui
                         OutlinedTextField(
                             value = input, onValueChange = { input = it },
                             modifier = Modifier.weight(1f),
@@ -226,7 +150,6 @@ fun ChatScreen(
                             onClick = {
                                 if (input.isNotBlank()) {
                                     onSend(input, messageToReply)
-                                    onUpdateTyping(false)
                                     input = ""
                                     messageToReply = null
                                 }
@@ -241,29 +164,6 @@ fun ChatScreen(
             }
         }
     }
-}
-
-@Composable
-fun ImageSourceDialog(
-    onDismiss: () -> Unit,
-    onCameraClick: () -> Unit,
-    onGalleryClick: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Escolher Fonte da Imagem") },
-        text = { Text("De onde você gostaria de enviar a imagem?") },
-        confirmButton = {
-            TextButton(onClick = onCameraClick) {
-                Text("Câmera")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onGalleryClick) {
-                Text("Galeria")
-            }
-        }
-    )
 }
 
 
@@ -300,9 +200,9 @@ fun MessageBubble(msg: Message, isOwn: Boolean, onLongPress: () -> Unit) {
         ) {
             Column(
                 modifier = Modifier.padding(
-                    start = if (msg.type == MessageType.IMAGE) 4.dp else 14.dp,
-                    end = if (msg.type == MessageType.IMAGE) 4.dp else 14.dp,
-                    top = if (msg.type == MessageType.IMAGE) 4.dp else 8.dp,
+                    start = 14.dp,
+                    end = 14.dp,
+                    top = 8.dp,
                     bottom = 8.dp
                 )
             ) {
@@ -310,27 +210,12 @@ fun MessageBubble(msg: Message, isOwn: Boolean, onLongPress: () -> Unit) {
                     ReplyMessageContent(replyMsg)
                 }
 
-                when (msg.type) {
-                    MessageType.TEXT -> {
-                        Text(
-                            text = msg.text,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = if (isOwn) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    MessageType.IMAGE -> {
-                        Image(
-                            painter = rememberAsyncImagePainter(model = msg.imageUrl),
-                            contentDescription = "Imagem enviada por ${msg.senderName}",
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(180.dp)
-                                .clip(RoundedCornerShape(12.dp)),
-                            contentScale = ContentScale.Crop
-                        )
-                    }
-                    MessageType.AUDIO -> { /* Futura implementação para o áudio */ }
-                }
+                // A lógica 'when' foi removida. Exibimos apenas o texto.
+                Text(
+                    text = msg.text,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (isOwn) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                )
 
                 Text(
                     text = DateFormat.format("HH:mm", msg.timeStamp).toString(),
@@ -347,8 +232,6 @@ fun MessageBubble(msg: Message, isOwn: Boolean, onLongPress: () -> Unit) {
     }
 }
 
-// Composables ReplyPreview, ReplyMessageContent e Avatar (sem alterações)
-// ... cole os que você já tinha aqui ...
 @Composable
 fun ReplyPreview(message: Message, onCancel: () -> Unit) {
     Box(
@@ -373,6 +256,7 @@ fun ReplyPreview(message: Message, onCancel: () -> Unit) {
                     color = MaterialTheme.colorScheme.primary,
                     fontSize = 14.sp
                 )
+                // Mostra apenas o texto da mensagem respondida
                 Text(
                     text = message.text,
                     maxLines = 1,
@@ -386,7 +270,6 @@ fun ReplyPreview(message: Message, onCancel: () -> Unit) {
         }
     }
 }
-
 
 @Composable
 fun ReplyMessageContent(message: Message) {
@@ -405,6 +288,7 @@ fun ReplyMessageContent(message: Message) {
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.primary
                 )
+                // Mostra apenas o texto da mensagem respondida
                 Text(
                     text = message.text,
                     style = MaterialTheme.typography.bodySmall,
