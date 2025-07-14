@@ -1,16 +1,16 @@
 package com.example.msgapp
 
-
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Column
-import androidx.compose.material.*
 import androidx.compose.runtime.*
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import com.example.msgapp.ui.theme.MsgAppTheme
 import com.example.msgapp.ui.view.ChatScreen
 import com.example.msgapp.ui.view.RoomSelector
-import com.example.msgapp.ui.view.notifyNewMessage
 import com.example.msgapp.viewmodel.MsgViewModel
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
@@ -21,59 +21,54 @@ class MainActivity : ComponentActivity() {
         FirebaseApp.initializeApp(this)
         setContent {
             MsgAppTheme {
-                MsgAppRoot()
+                MsgAppNavHost()
             }
         }
     }
 }
 
 @Composable
-fun MsgAppTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colors = lightColors(
-            primary = androidx.compose.ui.graphics.Color(0xFF1976D2),
-            secondary = androidx.compose.ui.graphics.Color(0xFF42A5F5)
-        ),
-        content = content
-    )
-}
-
-
-
-@Composable
-fun MsgAppRoot(vm: MsgViewModel = viewModel()) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-
-    // Login anônimo do Firebase
+fun MsgAppNavHost(vm: MsgViewModel = viewModel()) {
+    val navController = rememberNavController()
     val firebaseAuth = remember { FirebaseAuth.getInstance() }
     val user by produceState(initialValue = firebaseAuth.currentUser) {
         if (value == null) {
-            firebaseAuth.signInAnonymously()
-                .addOnCompleteListener { task -> value = firebaseAuth.currentUser }
+            firebaseAuth.signInAnonymously().addOnCompleteListener {
+                value = firebaseAuth.currentUser
+            }
         }
     }
-    val userId = user?.uid ?: "bruno"
-    var userName by remember { mutableStateOf("Usuário-${userId.takeLast(4)}") }
-    var currentRoom by remember { mutableStateOf("geral") }
-    var lastNotifiedId by remember { mutableStateOf<String?>(null) }
+    val userId = user?.uid ?: "Bruno"
+    val userName by remember { mutableStateOf(userId) }
 
-    LaunchedEffect(currentRoom) {
-        vm.switchRoom(currentRoom)
-    }
+    NavHost(navController = navController, startDestination = "room_selector") {
+        composable("room_selector") {
+            RoomSelector(onRoomSelected = { roomName ->
+                // Passa o ID do usuário para o ViewModel saber quem ignorar no "digitando"
+                vm.switchRoom(roomName, userId)
+                navController.navigate("chat_screen/$roomName")
+            })
+        }
+        composable("chat_screen/{roomName}") { backStackEntry ->
+            val roomName = backStackEntry.arguments?.getString("roomName") ?: "geral"
+            val messages by vm.messages.collectAsState()
+            val typingUsers by vm.typingUsers.collectAsState()
 
-    Column {
-        RoomSelector(onRoomSelected = { if (it.isNotBlank()) currentRoom = it })
-        ChatScreen(
-            username = userName,
-            userId = userId,
-            messages = vm.messages.collectAsState().value,
-            onSend = { text -> vm.sendMessage(userId, userName, text) },
-            currentRoom = currentRoom,
-            lastNotifiedId = lastNotifiedId,
-            onNotify = { msg ->
-                notifyNewMessage(context, msg)
-                lastNotifiedId = msg.id
-            }
-        )
+            ChatScreen(
+                username = userName,
+                userId = userId,
+                messages = messages,
+                typingUsers = typingUsers,
+                onSend = { text, replyTo -> vm.sendMessage(userId, userName, text, replyTo) },
+                onSendImage = { uri, replyTo -> vm.sendImage(userId, userName, uri, replyTo) },
+                onDelete = { messageId -> vm.deleteMessage(messageId) },
+                onUpdateTyping = { isTyping -> vm.updateTypingStatus(userId, userName, isTyping) },
+                currentRoom = roomName,
+                onLeaveRoom = {
+                    vm.updateTypingStatus(userId, userName, false) // Garante que o status seja limpo ao sair
+                    navController.popBackStack()
+                }
+            )
+        }
     }
 }

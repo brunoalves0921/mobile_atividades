@@ -44,6 +44,8 @@ dependencies {
 
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-database-ktx")
+    implementation("io.coil-kt:coil-compose:2.5.0") // Adicione esta linha
+    implementation("androidx.compose.material:material-icons-extended:1.6.8") // Verifique sempre a versão mais recente
     implementation("com.google.firebase:firebase-auth-ktx") // Só para login anônimo
     implementation("androidx.compose.ui:ui:1.5.3")
     implementation("androidx.compose.material:material:1.5.3")
@@ -59,6 +61,8 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    implementation(libs.androidx.navigation.compose.android)
+    implementation(libs.firebase.storage.ktx)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
