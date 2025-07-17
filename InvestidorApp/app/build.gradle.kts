@@ -42,6 +42,7 @@ android {
 
 dependencies {
 
+    implementation("androidx.compose.material:material-icons-extended:1.6.7")
     implementation(platform("com.google.firebase:firebase-bom:33.16.0"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
