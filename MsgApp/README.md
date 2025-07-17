@@ -2,6 +2,9 @@
 
 Aplicativo Android que simula um chat com Realtime Database
 
+## APK
+https://drive.google.com/file/d/1f8OMLgSPgCYfWRM3UT-iSrKBUBTSt9m2/view?usp=sharing
+
 ## Screenshots
 
 ## Tela inicial
