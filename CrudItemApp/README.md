@@ -2,6 +2,10 @@
 
 Aplicativo Android criado com **Jetpack Compose** que gerencia dados no firebase através de um CRUD simples
 
+## APK:
+
+https://drive.google.com/file/d/1GR-QHganLgm2XTqktf182pgbukLLOh72/view?usp=sharing
+
 ## Screenshots
 
 ## Tela inicial
