@@ -2,6 +2,9 @@
 
 Aplicativo Android criado com **Jetpack Compose** que gerencia informações em tempo real com Firebase Realtime Database
 
+## APK
+https://drive.google.com/file/d/1lwFH3HoRHNa_ha9oDaK-yeo0NvPLzfCU/view?usp=sharing
+
 ## Screenshots
 
 ## Tela inicial
